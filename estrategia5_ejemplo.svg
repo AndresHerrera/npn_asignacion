@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="300" viewBox="0 0 560 300">
+  <rect width="560" height="300" fill="#ffffff"/>
+  <text x="20" y="28" font-family="Arial" font-size="18" fill="#1f2d3d">Estrategia 5: Lawnmower (cortacesped)</text>
+  <rect x="50" y="60" width="460" height="190" fill="#f9fcff" stroke="#d6e2ef"/>
+  <polyline points="70,80 490,80 490,110 70,110 70,140 490,140 490,170 70,170 70,200 490,200 490,230 70,230" fill="none" stroke="#00897b" stroke-width="4"/>
+  <circle cx="70" cy="80" r="6" fill="#e53935"/>
+  <text x="80" y="76" font-family="Arial" font-size="12" fill="#e53935">inicio</text>
+  <text x="20" y="286" font-family="Arial" font-size="12" fill="#455a64">Bandas horizontales N-S con alternancia O-E / E-O.</text>
+</svg>
+

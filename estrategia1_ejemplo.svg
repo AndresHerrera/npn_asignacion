@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="300" viewBox="0 0 560 300">
+  <rect width="560" height="300" fill="#ffffff"/>
+  <text x="20" y="28" font-family="Arial" font-size="18" fill="#1f2d3d">Estrategia 1: Grilla + Zig-zag + Morton</text>
+  <g stroke="#c9d4df" stroke-width="1">
+    <line x1="40" y1="60" x2="520" y2="60"/><line x1="40" y1="100" x2="520" y2="100"/><line x1="40" y1="140" x2="520" y2="140"/>
+    <line x1="40" y1="180" x2="520" y2="180"/><line x1="40" y1="220" x2="520" y2="220"/><line x1="40" y1="260" x2="520" y2="260"/>
+    <line x1="40" y1="60" x2="40" y2="260"/><line x1="120" y1="60" x2="120" y2="260"/><line x1="200" y1="60" x2="200" y2="260"/>
+    <line x1="280" y1="60" x2="280" y2="260"/><line x1="360" y1="60" x2="360" y2="260"/><line x1="440" y1="60" x2="440" y2="260"/><line x1="520" y1="60" x2="520" y2="260"/>
+  </g>
+  <polyline points="60,80 500,80 500,120 60,120 60,160 500,160 500,200 60,200 60,240 500,240" fill="none" stroke="#0f6ab4" stroke-width="4"/>
+  <circle cx="60" cy="80" r="6" fill="#e53935"/>
+  <text x="72" y="84" font-family="Arial" font-size="13" fill="#e53935">inicio (N)</text>
+</svg>
+

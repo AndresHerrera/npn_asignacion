@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="300" viewBox="0 0 560 300">
+  <rect width="560" height="300" fill="#ffffff"/>
+  <text x="20" y="28" font-family="Arial" font-size="18" fill="#1f2d3d">Estrategia 2: Franjas + Microbandas</text>
+  <rect x="40" y="60" width="480" height="60" fill="#eef6ff" stroke="#b8cde3"/>
+  <rect x="40" y="120" width="480" height="60" fill="#f5f9ff" stroke="#b8cde3"/>
+  <rect x="40" y="180" width="480" height="60" fill="#eef6ff" stroke="#b8cde3"/>
+  <g stroke="#b5c7da" stroke-dasharray="4 4">
+    <line x1="40" y1="75" x2="520" y2="75"/><line x1="40" y1="90" x2="520" y2="90"/><line x1="40" y1="105" x2="520" y2="105"/>
+    <line x1="40" y1="135" x2="520" y2="135"/><line x1="40" y1="150" x2="520" y2="150"/><line x1="40" y1="165" x2="520" y2="165"/>
+    <line x1="40" y1="195" x2="520" y2="195"/><line x1="40" y1="210" x2="520" y2="210"/><line x1="40" y1="225" x2="520" y2="225"/>
+  </g>
+  <polyline points="60,75 500,75 500,90 60,90 60,105 500,105 500,135 60,135 60,150 500,150 500,165 60,165 60,195 500,195 500,210 60,210 60,225 500,225" fill="none" stroke="#1c8b4d" stroke-width="3.5"/>
+  <circle cx="60" cy="75" r="5" fill="#e53935"/>
+</svg>
+

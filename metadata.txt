@@ -1,0 +1,18 @@
+[general]
+name=npn asignacion
+email=fandresherrera@hotmail.com
+author=Andres Herrera
+qgisMinimumVersion=3.0
+description=Asigna codigos Terreno (0001-9999) usando diversas estrategias.
+about=Este Plugin permite seleccionar capa, campo y una estrategia para asignar codigos de terreno segun estrategia.
+tracker=https://github.com/AndresHerrera/npn_asignacion/issues
+repository=https://github.com/AndresHerrera/npn_asignacion
+homepage=https://github.com/AndresHerrera/npn_asignacion
+hasProcessingProvider=no
+version=0.1.0
+category=Vector
+tags=catastro,colombia,npn,urbano,rural
+icon=icons/icon.svg
+server=False
+deprecated=False
+qgisMaximumVersion=3.99
