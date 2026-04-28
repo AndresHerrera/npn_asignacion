@@ -1,15 +1,17 @@
-# NPN Asignación Cod. Terreno
+# NPN Asignacion Cod. Terreno
 
-Plugin para QGIS que asigna codigos consecutivos en un campo de una capa de poligonos, usando una estrategia espacial seleccionable.
+Complemento para [QGIS](https://qgis.org) que permite asignar de manera automatizada códigos consecutivos de terreno del NPN (Número Predial Nacional) en un campo de una capa de polígonos, mediante la aplicación de una estrategia espacial configurable.
 
 ## Funcionalidades
 
 - Seleccion de capa de poligonos.
-- Seleccion de `campo codigo` destino.
+- Seleccion de `Campo codigo` destino.
 - Opcion `solo elementos seleccionados`.
 - Parametros `Start number` y `Stop number` (0000 a 9999).
 - Seleccion de estrategia (1 a 5).
-- Carga temporal de la polilinea de recorrido resultante (`*_newcode_path`).
+- Modo `repetir por grupo` con selector `Campo grupo`.
+- Progreso de ejecucion con barra y opcion **Cancelar**.
+- Carga temporal de la polilinea de recorrido (en modo sin grupo).
 
 ## Requisitos
 
@@ -26,28 +28,47 @@ Plugin para QGIS que asigna codigos consecutivos en un campo de una capa de poli
 3. Abra `npn asignacion`.
 4. Configure:
    - `Capa`
-   - `Campo codigo`
+   - `Campo código terreno`
    - `solo elementos seleccionados` (opcional)
    - `Estrategia`
-   - `Start number` / `Stop number`
-5. Ejecute con **OK**.
+   - `Número inicial` / `Número final`
+   - `repetir por grupo` (opcional)
+   - `Campo grupo (vereda/manzana)` (obligatorio si activa `repetir por grupo`)
+5. Ejecute con **OK** y monitoree el avance en la barra de progreso.
 
 ## Reglas de asignacion
 
 - El rango valido de codigos es `0000` a `9999`.
-- Si `Start number > Stop number`, el plugin no ejecuta.
-- Si la cantidad de entidades a procesar excede el rango disponible, el plugin no ejecuta.
-- El plugin escribe los codigos en el `campo codigo` seleccionado.
+- Si `Número inicial` / `Número final`, el plugin no ejecuta.
+- En modo normal (sin grupo), si la cantidad de entidades excede el rango disponible, el plugin no ejecuta.
+- En modo `repetir por grupo`, la validacion de rango es por grupo: cada grupo reinicia desde `Número inicial` hasta `Número final`.
+- Si un grupo excede el rango, el proceso se detiene indicando el grupo con conflicto.
+- El plugin escribe los codigos en el `Campo código terreno` seleccionado.
+
+## Como funciona `repetir por grupo`
+
+Cuando esta activo:
+
+1. Primero agrupa entidades por el valor de `Campo grupo (vereda/manzana)`.
+2. Luego ejecuta la estrategia seleccionada **dentro de cada grupo**.
+3. Finalmente asigna codigos reiniciando en cada grupo:
+   - primer elemento del grupo = `Número inicial`
+   - siguiente = `Número inicial + 1`
+   - ...
+   - ultimo permitido = `Número final`
+
+## Progreso y cancelacion
+
+- Durante la ejecucion se muestra una barra de progreso.
+- El proceso reporta etapas y avance por grupo.
+- Se puede cancelar en cualquier momento con el boton **Cancelar**.
 
 ## Salidas
 
-- Actualizacion del campo codigo en la capa origen.
-- Capa temporal de linea con el recorrido de asignacion para visualizacion.
+- Actualizacion del `Campo código terreno` en la capa origen.
+- Capa temporal de linea con el recorrido de asignacion para visualizacion (modo sin grupo).
 
-## Estrategias
-
-# Estrategias de asignación NPN Código Terreno
-
+## Estrategias de asignacion
 
 ## Estrategia 1 - Grilla + Zig-zag + Morton
 
@@ -68,7 +89,7 @@ Plugin para QGIS que asigna codigos consecutivos en un campo de una capa de poli
 1. Define franjas N -> S.
 2. Dentro de cada franja crea microbandas.
 3. Aplica boustrophedon en cada nivel.
-4. Mantiene continuidad local evitando trazos "diente de sierra".
+4. Mantiene continuidad local evitando trazos tipo "diente de sierra".
 
 **Uso sugerido:** conjuntos con dispersion en Y dentro de la misma franja.
 
@@ -89,7 +110,7 @@ Plugin para QGIS que asigna codigos consecutivos en un campo de una capa de poli
 **Idea:** ajustar centroides al centro de celda mas cercano y ordenar sobre esa malla.
 
 1. Estima paso de grilla usando raiz del area minima.
-2. "Snapea" cada centroide a su celda.
+2. Ajusta cada centroide a su celda.
 3. Aplica barrido tipo boustrophedon.
 4. Usa Morton para desempate y continuidad.
 
@@ -106,11 +127,6 @@ Plugin para QGIS que asigna codigos consecutivos en un campo de una capa de poli
 
 **Uso sugerido:** recorridos simples, legibles y predecibles para inspeccion visual.
 
-## Rango de codigos
+## Licencia
 
-Todas las estrategias respetan:
-
-- `NPN_START` y `NPN_STOP` (desde la UI)
-- rango permitido: `0000` a `9999`
-- validacion por cantidad de entidades a procesar
-
+El proyecto incluye en la raíz el fichero [`LICENSE`](LICENSE) con el **texto completo de la GNU General Public License, versión 3** (29 de junio de 2007), tal como lo publica la [Free Software Foundation](https://www.fsf.org/) en [https://www.gnu.org/licenses/gpl-3.0.html](https://www.gnu.org/licenses/gpl-3.0.html).

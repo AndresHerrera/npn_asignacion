@@ -9,7 +9,7 @@ import time
 
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QApplication, QMessageBox, QProgressDialog
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
@@ -66,7 +66,11 @@ class NpnAsignacionPlugin:
         dialog.layer_combo.currentIndexChanged.connect(
             lambda _idx: self._populate_fields(dialog)
         )
+        dialog.layer_combo.currentIndexChanged.connect(
+            lambda _idx: self._populate_group_fields(dialog)
+        )
         self._populate_fields(dialog)
+        self._populate_group_fields(dialog)
 
         if dialog.exec_() != dialog.Accepted:
             return
@@ -77,6 +81,8 @@ class NpnAsignacionPlugin:
         only_selected = bool(dialog.only_selected_checkbox.isChecked())
         start_number = int(dialog.start_spin.value())
         stop_number = int(dialog.stop_spin.value())
+        repeat_by_group = bool(dialog.repeat_by_group_checkbox.isChecked())
+        group_field_name = dialog.group_field_combo.currentText().strip()
 
         if layer is None:
             self._msg("Seleccione una capa valida.", level=Qgis.Warning)
@@ -90,6 +96,31 @@ class NpnAsignacionPlugin:
         if start_number > stop_number:
             self._msg("Start number debe ser menor o igual a Stop number.", level=Qgis.Warning)
             return
+        if repeat_by_group and not group_field_name:
+            self._msg("Seleccione el campo grupo.", level=Qgis.Warning)
+            return
+
+        progress = QProgressDialog(
+            "Preparando asignacion...",
+            "Cancelar",
+            0,
+            100,
+            self.iface.mainWindow(),
+        )
+        progress.setWindowTitle("NPN Asignación (cod. terreno)")
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.show()
+        QApplication.processEvents()
+
+        def on_progress(value, text):
+            progress.setLabelText(text)
+            progress.setValue(max(0, min(100, int(value))))
+            QApplication.processEvents()
+
+        def is_canceled():
+            QApplication.processEvents()
+            return bool(progress.wasCanceled())
 
         try:
             asignados = self._assign_codes(
@@ -99,7 +130,12 @@ class NpnAsignacionPlugin:
                 start_number,
                 stop_number,
                 only_selected,
+                repeat_by_group,
+                group_field_name,
+                on_progress=on_progress,
+                is_canceled=is_canceled,
             )
+            progress.setValue(100)
             self._msg("Asignacion completada correctamente.", level=Qgis.Success)
             QMessageBox.information(
                 self.iface.mainWindow(),
@@ -107,12 +143,19 @@ class NpnAsignacionPlugin:
                 f"Proceso finalizado correctamente.\n"
                 f"Se asignaron códigos a {asignados} elemento(s).",
             )
+        except RuntimeError as exc:
+            if str(exc) == "Proceso cancelado por el usuario.":
+                self._msg("Asignacion cancelada por el usuario.", level=Qgis.Warning)
+                return
+            raise
         except Exception as exc:  # pragma: no cover - runtime integration
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 "npn asignacion",
                 f"No fue posible completar la asignacion:\n{exc}",
             )
+        finally:
+            progress.close()
 
     def _populate_layers(self, dialog):
         dialog.layer_combo.clear()
@@ -129,11 +172,41 @@ class NpnAsignacionPlugin:
             if field.type() in (QVariant.String, QVariant.Int, QVariant.LongLong):
                 dialog.field_combo.addItem(field.name())
 
+    def _populate_group_fields(self, dialog):
+        dialog.group_field_combo.clear()
+        layer = dialog.layer_combo.currentData()
+        if layer is None:
+            return
+        for field in layer.fields():
+            dialog.group_field_combo.addItem(field.name())
+
     def _assign_codes(
-        self, layer, field_name, strategy_id, start_number, stop_number, only_selected
+        self,
+        layer,
+        field_name,
+        strategy_id,
+        start_number,
+        stop_number,
+        only_selected,
+        repeat_by_group=False,
+        group_field_name="",
+        on_progress=None,
+        is_canceled=None,
     ):
+        def _progress(value, text):
+            if callable(on_progress):
+                on_progress(value, text)
+
+        def _check_cancel():
+            if callable(is_canceled) and is_canceled():
+                raise RuntimeError("Proceso cancelado por el usuario.")
+
+        _progress(1, "Validando parametros...")
+        _check_cancel()
         if layer.fields().indexFromName(field_name) == -1:
             raise ValueError(f"El campo '{field_name}' no existe.")
+        if repeat_by_group and layer.fields().indexFromName(group_field_name) == -1:
+            raise ValueError(f"El campo grupo '{group_field_name}' no existe.")
 
         if layer.featureCount() == 0:
             raise ValueError("La capa seleccionada no tiene entidades.")
@@ -141,6 +214,8 @@ class NpnAsignacionPlugin:
         selected_ids = layer.selectedFeatureIds() if only_selected else []
         if only_selected and not selected_ids:
             raise ValueError("No hay elementos seleccionados en la capa.")
+        _progress(6, "Preparando entidades...")
+        _check_cancel()
 
         source_layer = layer
         source_request = QgsFeatureRequest()
@@ -153,20 +228,144 @@ class NpnAsignacionPlugin:
                 raise ValueError("No fue posible materializar los elementos seleccionados.")
 
         available_codes = (stop_number - start_number) + 1
-        if feature_count > available_codes:
+        if not repeat_by_group and feature_count > available_codes:
             raise ValueError(
                 "La cantidad de entidades excede el rango Start/Stop seleccionado."
             )
+        _progress(10, "Iniciando estrategia...")
+        _check_cancel()
 
         strategy_file = os.path.join(self.plugin_dir, self.strategy_files[strategy_id])
         if not os.path.exists(strategy_file):
             raise FileNotFoundError(f"No se encontro el script: {strategy_file}")
 
+        layer_to_wgs84 = self._build_transform(layer.crs())
+        field_idx = layer.fields().indexFromName(field_name)
+        group_field_idx = layer.fields().indexFromName(group_field_name)
+        available_codes = (stop_number - start_number) + 1
+        updated = 0
+
+        update_request = QgsFeatureRequest()
+        if only_selected:
+            update_request.setFilterFids(selected_ids)
+
+        with edit(layer):
+            if repeat_by_group:
+                feature_ids_by_group = {}
+                for feat in layer.getFeatures(update_request):
+                    group_value = feat[group_field_idx]
+                    counter_key = group_value if group_value is not None else "__NULL__"
+                    feature_ids_by_group.setdefault(counter_key, []).append(feat.id())
+                _check_cancel()
+
+                total_groups = max(1, len(feature_ids_by_group))
+                for idx, (group_key, group_fids) in enumerate(feature_ids_by_group.items(), 1):
+                    _progress(
+                        10 + int((idx - 1) * 65 / total_groups),
+                        f"Procesando grupo {idx}/{total_groups}: {group_key}",
+                    )
+                    _check_cancel()
+                    if len(group_fids) > available_codes:
+                        raise ValueError(
+                            f"El grupo '{group_key}' excede el rango Start/Stop seleccionado."
+                        )
+                    group_request = QgsFeatureRequest().setFilterFids(group_fids)
+                    group_layer = layer.materialize(group_request)
+                    if int(group_layer.featureCount()) == 0:
+                        continue
+                    geometry_to_code = self._run_strategy(
+                        group_layer,
+                        strategy_id,
+                        strategy_file,
+                        start_number,
+                        stop_number,
+                        add_line_layer=False,
+                        source_layer_name=layer.name(),
+                    )
+                    _check_cancel()
+                    for feat in layer.getFeatures(group_request):
+                        geom = feat.geometry()
+                        if geom is None or geom.isEmpty():
+                            continue
+                        key = self._feature_match_key(geom, layer_to_wgs84)
+                        codes = geometry_to_code.get(key)
+                        if not codes:
+                            continue
+                        code_value = codes.pop(0)
+                        if layer.fields()[field_idx].type() in (
+                            QVariant.Int,
+                            QVariant.LongLong,
+                        ):
+                            code_value = int(code_value)
+                        else:
+                            code_value = str(code_value)
+                        layer.changeAttributeValue(feat.id(), field_idx, code_value)
+                        updated += 1
+                    _progress(
+                        10 + int(idx * 65 / total_groups),
+                        f"Grupo {idx}/{total_groups} finalizado.",
+                    )
+            else:
+                _progress(20, "Ejecutando estrategia seleccionada...")
+                _check_cancel()
+                geometry_to_code = self._run_strategy(
+                    source_layer,
+                    strategy_id,
+                    strategy_file,
+                    start_number,
+                    stop_number,
+                    add_line_layer=True,
+                    source_layer_name=layer.name(),
+                )
+                _progress(75, "Aplicando codigos a la capa...")
+                _check_cancel()
+                for feat in layer.getFeatures(update_request):
+                    geom = feat.geometry()
+                    if geom is None or geom.isEmpty():
+                        continue
+                    key = self._feature_match_key(geom, layer_to_wgs84)
+                    codes = geometry_to_code.get(key)
+                    if not codes:
+                        continue
+                    code_value = codes.pop(0)
+                    if layer.fields()[field_idx].type() in (
+                        QVariant.Int,
+                        QVariant.LongLong,
+                    ):
+                        code_value = int(code_value)
+                    else:
+                        code_value = str(code_value)
+                    layer.changeAttributeValue(feat.id(), field_idx, code_value)
+                    updated += 1
+                    if updated % 200 == 0:
+                        _progress(75 + int(min(24, (updated / max(1, feature_count)) * 24)), "Aplicando codigos...")
+                        _check_cancel()
+
+        layer.triggerRepaint()
+        if updated == 0:
+            raise RuntimeError(
+                "No se actualizaron entidades en el campo seleccionado. "
+                "Revise que la capa no haya cambiado durante el proceso."
+            )
+        _progress(99, "Finalizando...")
+        _check_cancel()
+        gc.collect()
+        return updated
+
+    def _run_strategy(
+        self,
+        source_layer,
+        strategy_id,
+        strategy_file,
+        start_number,
+        stop_number,
+        add_line_layer,
+        source_layer_name,
+    ):
         tmp_dir = tempfile.mkdtemp(prefix="npn_asignacion_")
         try:
             input_path = os.path.join(tmp_dir, "terrenos_test.shp")
             output_path = os.path.join(tmp_dir, self.strategy_outputs[strategy_id])
-            output_lines_path = output_path.replace(".shp", "_newcode_path.shp")
 
             error = QgsVectorFileWriter.writeAsVectorFormat(
                 source_layer,
@@ -192,7 +391,7 @@ class NpnAsignacionPlugin:
                 os.environ["NPN_START"] = str(start_number)
                 os.environ["NPN_STOP"] = str(stop_number)
                 spec = importlib.util.spec_from_file_location(
-                    f"npn_estrategia_{strategy_id}_run", strategy_file
+                    f"npn_estrategia_{strategy_id}_run_{time.time_ns()}", strategy_file
                 )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
@@ -216,19 +415,16 @@ class NpnAsignacionPlugin:
                         "Revise dependencias de geopandas/numpy/shapely."
                     )
             output_lines_path = output_path.replace(".shp", "_newcode_path.shp")
-            self._load_temp_line_result(output_lines_path, layer.name(), strategy_id)
+            if add_line_layer:
+                self._load_temp_line_result(output_lines_path, source_layer_name, strategy_id)
 
             result_layer = QgsVectorLayer(output_path, "npn_result", "ogr")
             if not result_layer.isValid():
                 raise RuntimeError("No fue posible leer el resultado de la estrategia.")
-
-            code_idx = result_layer.fields().indexFromName("NEW_CODE")
-            if code_idx == -1:
+            if result_layer.fields().indexFromName("NEW_CODE") == -1:
                 raise RuntimeError("La salida de estrategia no contiene el campo NEW_CODE.")
 
-            layer_to_wgs84 = self._build_transform(layer.crs())
             result_to_wgs84 = self._build_transform(result_layer.crs())
-
             geometry_to_code = {}
             for feat in result_layer.getFeatures():
                 geom = feat.geometry()
@@ -236,38 +432,8 @@ class NpnAsignacionPlugin:
                     continue
                 key = self._feature_match_key(geom, result_to_wgs84)
                 geometry_to_code.setdefault(key, []).append(str(feat["NEW_CODE"]))
-
-            field_idx = layer.fields().indexFromName(field_name)
-            updated = 0
-            update_request = QgsFeatureRequest()
-            if only_selected:
-                update_request.setFilterFids(selected_ids)
-            with edit(layer):
-                for feat in layer.getFeatures(update_request):
-                    geom = feat.geometry()
-                    if geom is None or geom.isEmpty():
-                        continue
-                    key = self._feature_match_key(geom, layer_to_wgs84)
-                    codes = geometry_to_code.get(key)
-                    if not codes:
-                        continue
-                    code = codes.pop(0)
-                    if layer.fields()[field_idx].type() in (QVariant.Int, QVariant.LongLong):
-                        code_value = int(code)
-                    else:
-                        code_value = code
-                    layer.changeAttributeValue(feat.id(), field_idx, code_value)
-                    updated += 1
-
-            layer.triggerRepaint()
-            if updated == 0:
-                raise RuntimeError(
-                    "No se actualizaron entidades en el campo seleccionado. "
-                    "Revise que la capa no haya cambiado durante el proceso."
-                )
             result_layer = None
-            gc.collect()
-            return updated
+            return geometry_to_code
         finally:
             self._safe_rmtree(tmp_dir)
 
