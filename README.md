@@ -7,7 +7,7 @@ Complemento para [QGIS](https://qgis.org) que permite asignar de manera automati
 - Seleccion de capa de poligonos.
 - Seleccion de `Campo codigo` destino.
 - Opcion `solo elementos seleccionados`.
-- Parametros `Start number` y `Stop number` (0000 a 9999).
+- Parametros `Número inicial` y `Número final` (0000 a 9999).
 - Seleccion de estrategia (1 a 5).
 - Modo `repetir por grupo` con selector `Campo grupo`.
 - Progreso de ejecucion con barra y opcion **Cancelar**.
@@ -20,6 +20,12 @@ Complemento para [QGIS](https://qgis.org) que permite asignar de manera automati
   - `geopandas`
   - `numpy`
   - `shapely`
+
+## Instalación
+
+1. Copia la carpeta `npn_asignacion` al directorio de complementos de Python de tu perfil de QGIS, por ejemplo:
+   - **Windows:** `%APPDATA%\QGIS\QGIS3\profiles\<perfil>\python\plugins\`
+2. En QGIS: **Complementos → Gestionar e instalar complementos → Instalado** y activa **npn asignacion**.  
 
 ## Uso rapido
 
